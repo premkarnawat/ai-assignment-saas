@@ -1,0 +1,77 @@
+/* frontend/app/globals.css */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+    --brand: 221.2 83.2% 53.3%;
+    --brand-foreground: 210 40% 98%;
+  }
+
+  * {
+    @apply border-gray-200;
+  }
+
+  body {
+    @apply bg-slate-50 text-slate-900;
+  }
+
+  h1, h2, h3 {
+    @apply tracking-tight;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply bg-blue-600 hover:bg-blue-700 text-white font-semibold px-5 py-2.5 rounded-lg
+           transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed
+           focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2;
+  }
+
+  .btn-secondary {
+    @apply bg-white hover:bg-slate-50 text-slate-700 font-semibold px-5 py-2.5
+           rounded-lg border border-slate-200 transition-all duration-150
+           focus:outline-none focus:ring-2 focus:ring-slate-300;
+  }
+
+  .card {
+    @apply bg-white rounded-xl border border-slate-200 shadow-sm;
+  }
+
+  .input {
+    @apply w-full border border-slate-200 rounded-lg px-4 py-2.5 text-sm
+           focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
+           placeholder:text-slate-400 transition-all duration-150;
+  }
+
+  .label {
+    @apply block text-sm font-medium text-slate-700 mb-1.5;
+  }
+}
+
+/* Handwriting preview animation */
+@keyframes writingCursor {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+.writing-cursor {
+  animation: writingCursor 1s ease-in-out infinite;
+}
+
+/* Notebook paper background */
+.notebook-bg {
+  background-color: #fdf8f0;
+  background-image:
+    linear-gradient(#c8d8e8 1px, transparent 1px);
+  background-size: 100% 34px;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: #f1f5f9; }
+::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
