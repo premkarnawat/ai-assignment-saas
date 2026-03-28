@@ -12,18 +12,22 @@ export default function PreviewPage() {
   const { data, isLoading, refetch } = useQuery({
     queryKey: ["assignment-status", id],
     queryFn: () => assignments.status(id).then((r) => r.data),
-    refetchInterval: (data) =>
-      data?.status === "done" || data?.status === "failed" ? false : 2000,
+
+    // ✅ FIXED (React Query v5)
+    refetchInterval: (query) => {
+      const status = (query.state.data as any)?.status;
+      return status === "done" || status === "failed" ? false : 2000;
+    },
   });
 
   const handleShare = async () => {
-    if (navigator.share && data?.pdf_url) {
+    if (navigator.share && (data as any)?.pdf_url) {
       await navigator.share({
         title: "My Handwritten Assignment",
-        url: data.pdf_url,
+        url: (data as any).pdf_url,
       });
     } else {
-      navigator.clipboard?.writeText(data?.pdf_url || window.location.href);
+      navigator.clipboard?.writeText((data as any)?.pdf_url || window.location.href);
       alert("Link copied!");
     }
   };
@@ -35,6 +39,8 @@ export default function PreviewPage() {
       </div>
     );
   }
+
+  const assignment = data as any;
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -48,7 +54,7 @@ export default function PreviewPage() {
           </Link>
 
           <div className="flex items-center gap-3">
-            {data?.status === "done" && (
+            {assignment?.status === "done" && (
               <>
                 <button
                   onClick={handleShare}
@@ -57,7 +63,7 @@ export default function PreviewPage() {
                   <Share2 className="w-4 h-4" /> Share
                 </button>
                 <a
-                  href={data.pdf_url}
+                  href={assignment.pdf_url}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="btn-primary flex items-center gap-2 text-sm"
@@ -70,7 +76,7 @@ export default function PreviewPage() {
         </div>
 
         {/* Status states */}
-        {data?.status === "processing" || data?.status === "pending" ? (
+        {assignment?.status === "processing" || assignment?.status === "pending" ? (
           <div className="card p-16 text-center">
             <div className="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-4">
               <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
@@ -82,14 +88,13 @@ export default function PreviewPage() {
               AI is generating content and rendering realistic handwriting.
               This takes 15–30 seconds.
             </p>
-            <div className="mt-6 w-48 h-2 bg-slate-100 rounded-full mx-auto overflow-hidden">
-              <div className="h-full bg-blue-600 rounded-full animate-pulse w-3/4" />
-            </div>
           </div>
-        ) : data?.status === "failed" ? (
+        ) : assignment?.status === "failed" ? (
           <div className="card p-16 text-center border-red-200">
             <h2 className="text-xl font-bold text-red-600 mb-2">Generation Failed</h2>
-            <p className="text-slate-500 text-sm mb-6">{data.error || "Something went wrong"}</p>
+            <p className="text-slate-500 text-sm mb-6">
+              {assignment.error || "Something went wrong"}
+            </p>
             <div className="flex items-center justify-center gap-3">
               <Link href="/generate" className="btn-primary">Try Again</Link>
               <button onClick={() => refetch()} className="btn-secondary flex items-center gap-2">
@@ -97,12 +102,13 @@ export default function PreviewPage() {
               </button>
             </div>
           </div>
-        ) : data?.status === "done" ? (
+        ) : assignment?.status === "done" ? (
           <div className="space-y-4">
+
             {/* Stats */}
             <div className="grid grid-cols-3 gap-4">
               {[
-                { label: "Pages", value: data.page_count || "—" },
+                { label: "Pages", value: assignment.page_count || "—" },
                 { label: "Format", value: "PDF" },
                 { label: "Quality", value: "95% Realistic" },
               ].map((s, i) => (
@@ -113,15 +119,15 @@ export default function PreviewPage() {
               ))}
             </div>
 
-            {/* PDF Embed */}
+            {/* PDF Preview */}
             <div className="card overflow-hidden">
               <div className="border-b border-slate-100 px-4 py-3 flex items-center justify-between">
                 <span className="font-semibold text-slate-700 text-sm">PDF Preview</span>
-                <span className="text-xs text-slate-400">{data.page_count} pages</span>
+                <span className="text-xs text-slate-400">{assignment.page_count} pages</span>
               </div>
-              {data.pdf_url && (
+              {typeof assignment.pdf_url === "string" && (
                 <iframe
-                  src={data.pdf_url}
+                  src={assignment.pdf_url}
                   className="w-full"
                   style={{ height: "700px", border: "none" }}
                   title="Assignment PDF"
@@ -133,8 +139,12 @@ export default function PreviewPage() {
             <div className="card p-6">
               <h3 className="font-bold text-slate-800 mb-4">What&apos;s next?</h3>
               <div className="flex flex-wrap gap-3">
-                <a href={data.pdf_url} target="_blank" rel="noopener noreferrer"
-                   className="btn-primary flex items-center gap-2">
+                <a
+                  href={assignment.pdf_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="btn-primary flex items-center gap-2"
+                >
                   <Download className="w-4 h-4" /> Download PDF
                 </a>
                 <Link href="/generate" className="btn-secondary">
