@@ -78,7 +78,7 @@ export default function DashboardPage() {
           ))}
         </div>
 
-        {/* Usage bar (free tier) */}
+        {/* Usage bar */}
         {stats.tier === "free" && (
           <div className="card p-4 mb-6 flex items-center gap-4">
             <div className="flex-1">
@@ -115,12 +115,7 @@ export default function DashboardPage() {
           <div className="space-y-3">
             {list.map((a: Record<string, unknown>) => (
               <div key={a.id as string} className="card p-4 flex items-center gap-4 hover:shadow-md transition-shadow">
-                {/* Icon */}
-                <div className="w-10 h-10 bg-blue-50 rounded-lg flex items-center justify-center flex-shrink-0">
-                  <FileText className="w-5 h-5 text-blue-500" />
-                </div>
 
-                {/* Content */}
                 <div className="flex-1 min-w-0">
                   <p className="font-semibold text-slate-800 truncate text-sm">
                     {(a.question as string).slice(0, 80)}...
@@ -129,27 +124,19 @@ export default function DashboardPage() {
                     <span className="text-xs text-slate-400">
                       {formatDistanceToNow(new Date(a.created_at as string), { addSuffix: true })}
                     </span>
-                    {(a.page_count as number) > 0 && (
-                      <span className="text-xs text-slate-400">{a.page_count as number} pages</span>
-                    )}
                   </div>
                 </div>
 
-                {/* Status */}
                 <StatusBadge status={a.status as string} />
 
-                {/* Actions */}
                 <div className="flex items-center gap-2 flex-shrink-0">
-                  {a.status === "done" && a.pdf_url && (
+                  {a.status === "done" && typeof a.pdf_url === "string" && (
                     <>
-                      <Link
-                        href={`/preview/${a.id}`}
-                        className="btn-secondary text-xs py-1.5 px-3"
-                      >
+                      <Link href={`/preview/${a.id}`} className="btn-secondary text-xs py-1.5 px-3">
                         View
                       </Link>
                       <a
-                        href={a.pdf_url as string}
+                        href={a.pdf_url}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="btn-primary text-xs py-1.5 px-3 flex items-center gap-1"
@@ -160,8 +147,7 @@ export default function DashboardPage() {
                   )}
                   <button
                     onClick={() => handleDelete(a.id as string)}
-                    className="p-1.5 text-slate-400 hover:text-red-500 rounded-lg
-                               hover:bg-red-50 transition-colors"
+                    className="p-1.5 text-slate-400 hover:text-red-500 rounded-lg hover:bg-red-50 transition-colors"
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
