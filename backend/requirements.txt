@@ -7,8 +7,6 @@ pydantic-settings==2.5.2
 sqlalchemy[asyncio]==2.0.36
 asyncpg==0.29.0
 alembic==1.13.3
-celery[redis]==5.4.0
-redis==5.1.1
 passlib[bcrypt]==1.7.4
 pyjwt==2.9.0
 python-multipart==0.0.12
