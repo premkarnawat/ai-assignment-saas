@@ -83,10 +83,10 @@ async def _call_groq(system: str, user: str) -> str:
     from groq import AsyncGroq
     client = AsyncGroq(api_key=settings.GROQ_API_KEY)
     response = await client.chat.completions.create(
-        model=settings.AI_MODEL_PRIMARY,
+        model="llama-3.3-70b-versatile",   # ← updated model name
         messages=[
             {"role": "system", "content": system},
-            {"role": "user", "content": user},
+            {"role": "user",   "content": user},
         ],
         temperature=0.7,
         max_tokens=4096,
@@ -102,7 +102,7 @@ async def _call_openai(system: str, user: str) -> str:
         model=settings.AI_MODEL_FALLBACK,
         messages=[
             {"role": "system", "content": system},
-            {"role": "user", "content": user},
+            {"role": "user",   "content": user},
         ],
         temperature=0.7,
         max_tokens=4096,
@@ -112,7 +112,7 @@ async def _call_openai(system: str, user: str) -> str:
 
 
 async def _call_ai(system: str, user_prompt: str) -> dict:
-    """Try Groq first, fall back to OpenAI."""
+    """Try Groq first, fall back to OpenAI if Groq fails."""
     raw = None
     try:
         if settings.GROQ_API_KEY:
@@ -120,26 +120,30 @@ async def _call_ai(system: str, user_prompt: str) -> dict:
         elif settings.OPENAI_API_KEY:
             raw = await _call_openai(system, user_prompt)
         else:
-            raise ValueError("No AI API key configured")
+            raise ValueError("No AI API key configured. Add GROQ_API_KEY to Render env vars.")
     except Exception as groq_err:
         logger.warning(f"Groq failed: {groq_err}, falling back to OpenAI")
         if settings.OPENAI_API_KEY:
             raw = await _call_openai(system, user_prompt)
         else:
-            raise
+            raise groq_err
 
     return json.loads(raw)
 
 
 async def generate_structured_answer(
-    question: str, subject: str = "General", grade_level: str = "college"
+    question:    str,
+    subject:     str = "General",
+    grade_level: str = "college",
 ) -> dict:
     user_prompt = ASSIGNMENT_USER.format(
-        question=question, subject=subject, grade_level=grade_level
+        question=question,
+        subject=subject,
+        grade_level=grade_level,
     )
     result = await _call_ai(ASSIGNMENT_SYSTEM, user_prompt)
 
-    # Ensure full_text is populated
+    # Ensure full_text is populated from sections if missing
     if not result.get("full_text") and result.get("sections"):
         parts = [result.get("title", "")]
         for section in result["sections"]:
@@ -151,19 +155,19 @@ async def generate_structured_answer(
 
 
 async def generate_notebook_content(
-    subject: str,
-    topic: str,
-    pages: int,
-    subtopics: list,
+    subject:          str,
+    topic:            str,
+    pages:            int,
+    subtopics:        list,
     include_diagrams: bool = True,
     include_examples: bool = True,
 ) -> dict:
     user_prompt = NOTEBOOK_USER.format(
-        subject=subject,
-        topic=topic,
-        pages=pages,
-        subtopics=", ".join(subtopics) if subtopics else "auto-generate",
-        include_diagrams=include_diagrams,
-        include_examples=include_examples,
+        subject          = subject,
+        topic            = topic,
+        pages            = pages,
+        subtopics        = ", ".join(subtopics) if subtopics else "auto-generate",
+        include_diagrams = include_diagrams,
+        include_examples = include_examples,
     )
     return await _call_ai(NOTEBOOK_SYSTEM, user_prompt)
