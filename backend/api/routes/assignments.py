@@ -1,7 +1,8 @@
 # backend/api/routes/assignments.py
 import asyncio
 import logging
-from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
+import httpx
+from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_
 from pydantic import BaseModel
@@ -20,23 +21,23 @@ logger = logging.getLogger(__name__)
 
 
 class GenerateRequest(BaseModel):
-    question: str
-    subject: Optional[str] = "General"
-    grade_level: Optional[str] = "college"
+    question:          str
+    subject:           Optional[str] = "General"
+    grade_level:       Optional[str] = "college"
     handwriting_style: Optional[str] = "casual"
-    paper_type: Optional[str] = "notebook"
-    font_name: Optional[str] = "Caveat"
+    paper_type:        Optional[str] = "notebook"
+    font_name:         Optional[str] = "Caveat"
 
 
 class AssignmentOut(BaseModel):
-    id: str
-    question: str
-    subject: Optional[str]
-    status: str
-    pdf_url: Optional[str]
+    id:            str
+    question:      str
+    subject:       Optional[str]
+    status:        str
+    pdf_url:       Optional[str]
     thumbnail_url: Optional[str]
-    page_count: int
-    created_at: datetime
+    page_count:    int
+    created_at:    datetime
 
     class Config:
         from_attributes = True
@@ -68,20 +69,15 @@ async def log_usage(user_id: str, action: str, db: AsyncSession):
     db.add(log)
 
 
-# ── Background job — runs after FastAPI returns response to user ──────────────
 async def run_assignment_job(
-    assignment_id: str,
-    question: str,
-    subject: str,
-    grade_level: str,
+    assignment_id:     str,
+    question:          str,
+    subject:           str,
+    grade_level:       str,
     handwriting_style: str,
-    paper_type: str,
-    font_name: str,
+    paper_type:        str,
+    font_name:         str,
 ):
-    """
-    This runs in the background after the API instantly returns job_id to user.
-    Does the heavy work: AI call → handwriting render → PDF → Cloudinary upload.
-    """
     from core.database import AsyncSessionLocal
     from services.ai_service import generate_structured_answer
     from services.pdf_service import build_assignment_pdf
@@ -91,41 +87,37 @@ async def run_assignment_job(
 
     async with AsyncSessionLocal() as db:
         try:
-            # Get assignment from database
             result = await db.execute(
                 select(Assignment).where(Assignment.id == assignment_id)
             )
             assignment = result.scalar_one()
 
-            # Step 1 — AI generates structured answer
             structured = await generate_structured_answer(
                 question=question,
                 subject=subject,
                 grade_level=grade_level,
             )
             assignment.generated_answer = structured.get("full_text", "")
-            assignment.sections_json = structured
-            assignment.has_diagram = structured.get("has_diagram", False)
-            assignment.has_math = structured.get("has_math", False)
+            assignment.sections_json    = structured
+            assignment.has_diagram      = structured.get("has_diagram", False)
+            assignment.has_math         = structured.get("has_math", False)
 
-            # Step 2 — Render handwritten PDF
             pdf_bytes, page_count = await build_assignment_pdf(
-                structured=structured,
-                handwriting_style=handwriting_style,
-                paper_type=paper_type,
-                font_name=font_name,
+                structured        = structured,
+                handwriting_style = handwriting_style,
+                paper_type        = paper_type,
+                font_name         = font_name,
+                subject           = subject,
             )
 
-            # Step 3 — Upload to Cloudinary
             filename = f"assignments/{assignment_id}/output.pdf"
-            pdf_url = await upload_file(
+            pdf_url  = await upload_file(
                 pdf_bytes, filename, content_type="application/pdf"
             )
 
-            # Step 4 — Mark as done
-            assignment.pdf_url = pdf_url
-            assignment.page_count = page_count
-            assignment.status = "done"
+            assignment.pdf_url      = pdf_url
+            assignment.page_count   = page_count
+            assignment.status       = "done"
             assignment.completed_at = datetime.now(timezone.utc)
             await db.commit()
 
@@ -139,7 +131,7 @@ async def run_assignment_job(
                 )
                 assignment = result.scalar_one_or_none()
                 if assignment:
-                    assignment.status = "failed"
+                    assignment.status        = "failed"
                     assignment.error_message = str(e)[:500]
                     await db.commit()
             except Exception:
@@ -148,58 +140,51 @@ async def run_assignment_job(
 
 @router.post("/generate")
 async def generate_assignment(
-    payload: GenerateRequest,
+    payload:          GenerateRequest,
     background_tasks: BackgroundTasks,
-    user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    user:             User         = Depends(get_current_user),
+    db:               AsyncSession = Depends(get_db),
 ):
-    # Check free tier limit
     await check_usage(user, db)
 
-    # Save assignment to database with status pending
     assignment = Assignment(
-        user_id=user.id,
-        question=payload.question,
-        subject=payload.subject,
-        grade_level=payload.grade_level,
-        handwriting_style=payload.handwriting_style,
-        paper_type=payload.paper_type,
-        font_name=payload.font_name,
-        status="processing",
+        user_id           = user.id,
+        question          = payload.question,
+        subject           = payload.subject,
+        grade_level       = payload.grade_level,
+        handwriting_style = payload.handwriting_style,
+        paper_type        = payload.paper_type,
+        font_name         = payload.font_name,
+        status            = "processing",
     )
     db.add(assignment)
     await log_usage(user.id, "generate_assignment", db)
     await db.commit()
     await db.refresh(assignment)
 
-    # Add job to background — FastAPI returns instantly, job runs after
     background_tasks.add_task(
         run_assignment_job,
-        assignment_id=assignment.id,
-        question=payload.question,
-        subject=payload.subject or "General",
-        grade_level=payload.grade_level or "college",
-        handwriting_style=payload.handwriting_style or "casual",
-        paper_type=payload.paper_type or "notebook",
-        font_name=payload.font_name or "Caveat",
+        assignment_id     = assignment.id,
+        question          = payload.question,
+        subject           = payload.subject or "General",
+        grade_level       = payload.grade_level or "college",
+        handwriting_style = payload.handwriting_style or "casual",
+        paper_type        = payload.paper_type or "notebook",
+        font_name         = payload.font_name or "Caveat",
     )
 
-    # Return immediately — frontend polls /status until done
-    return {
-        "assignment_id": assignment.id,
-        "status": "processing",
-    }
+    return {"assignment_id": assignment.id, "status": "processing"}
 
 
 @router.get("/{assignment_id}/status")
 async def get_status(
     assignment_id: str,
-    user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    user:          User         = Depends(get_current_user),
+    db:            AsyncSession = Depends(get_db),
 ):
     result = await db.execute(
         select(Assignment).where(
-            Assignment.id == assignment_id,
+            Assignment.id      == assignment_id,
             Assignment.user_id == user.id,
         )
     )
@@ -208,20 +193,62 @@ async def get_status(
         raise HTTPException(status_code=404, detail="Assignment not found")
 
     return {
-        "status": assignment.status,
-        "pdf_url": assignment.pdf_url,
+        "status":        assignment.status,
+        "pdf_url":       assignment.pdf_url,
         "thumbnail_url": assignment.thumbnail_url,
-        "page_count": assignment.page_count,
-        "error": assignment.error_message,
+        "page_count":    assignment.page_count,
+        "error":         assignment.error_message,
     }
+
+
+@router.get("/{assignment_id}/download")
+async def download_pdf(
+    assignment_id: str,
+    user:          User         = Depends(get_current_user),
+    db:            AsyncSession = Depends(get_db),
+):
+    """
+    Download endpoint — fetches PDF from Cloudinary and serves it
+    with correct Content-Type and Content-Disposition headers so
+    the browser downloads it as a proper PDF file.
+    """
+    result = await db.execute(
+        select(Assignment).where(
+            Assignment.id      == assignment_id,
+            Assignment.user_id == user.id,
+        )
+    )
+    assignment = result.scalar_one_or_none()
+    if not assignment:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+    if assignment.status != "done" or not assignment.pdf_url:
+        raise HTTPException(status_code=400, detail="PDF not ready yet")
+
+    # Fetch PDF bytes from Cloudinary URL
+    async with httpx.AsyncClient() as client:
+        resp = await client.get(assignment.pdf_url, timeout=30)
+        if resp.status_code != 200:
+            raise HTTPException(status_code=502, detail="Failed to fetch PDF from storage")
+        pdf_bytes = resp.content
+
+    # Return with correct headers — browser will download as PDF
+    filename = f"assignment-{assignment_id[:8]}.pdf"
+    return Response(
+        content     = pdf_bytes,
+        media_type  = "application/pdf",
+        headers     = {
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Content-Type":        "application/pdf",
+        },
+    )
 
 
 @router.get("/", response_model=list[AssignmentOut])
 async def list_assignments(
-    page: int = Query(default=1, ge=1),
-    limit: int = Query(default=20, le=100),
-    user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    page:  int          = Query(default=1, ge=1),
+    limit: int          = Query(default=20, le=100),
+    user:  User         = Depends(get_current_user),
+    db:    AsyncSession = Depends(get_db),
 ):
     offset = (page - 1) * limit
     result = await db.execute(
@@ -237,12 +264,12 @@ async def list_assignments(
 @router.delete("/{assignment_id}")
 async def delete_assignment(
     assignment_id: str,
-    user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    user:          User         = Depends(get_current_user),
+    db:            AsyncSession = Depends(get_db),
 ):
     result = await db.execute(
         select(Assignment).where(
-            Assignment.id == assignment_id,
+            Assignment.id      == assignment_id,
             Assignment.user_id == user.id,
         )
     )
