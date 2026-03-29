@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     # AI (Groq primary, OpenAI fallback)
     GROQ_API_KEY: str = ""
     OPENAI_API_KEY: str = ""
-    AI_MODEL_PRIMARY: str = "llama3-70b-8192"
+    AI_MODEL_PRIMARY: str = "llama-3.3-70b-versatile"
     AI_MODEL_FALLBACK: str = "gpt-4o-mini"
 
     # ── Cloudinary (File Storage) ─────────────────────────────────────────────
